@@ -18,8 +18,8 @@
   #top{position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:#0f4236;z-index:3}
   /* the app sits between the clock bar and the phone's home bar */
   #wrap{position:fixed;top:env(safe-area-inset-top);left:0;right:0;bottom:env(safe-area-inset-bottom);overflow:hidden;background:#f6f1e7}
-  /* Google's notice bar is pushed above the visible area */
-  #f{position:absolute;left:0;width:100%;border:0;top:calc(-1 * var(--crop, 0px));height:calc(100% + var(--crop, 0px));opacity:0;transition:opacity .25s}
+  /* Google's notice bar is pushed above the visible area (sizes set in the script) */
+  #f{position:absolute;left:0;top:0;width:100%;height:100%;border:0;display:block;opacity:0;transition:opacity .25s}
   #f.on{opacity:1}
   #load{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0f4236;color:#f1ead8;font:600 15px system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;z-index:4;transition:opacity .3s}
   #load img{width:84px;height:84px;border-radius:20px}
@@ -41,17 +41,29 @@
     try { localStorage.setItem('avia_dev', dev); } catch (e) {}
   }
   var f = document.getElementById('f'), wrap = document.getElementById('wrap'), load = document.getElementById('load');
-  var crop = 0, shown = false;
+  var crop = 0, shown = false, lastIh = 0, sent = false;
   function show() { if (shown) return; shown = true; f.className = 'on'; load.className = 'gone'; }
-  // the app reports how tall its own area is; the difference is Google's notice bar, which we hide
+  // size the frame in exact pixels: taller than the visible area by the height of Google's notice bar, and shifted up by it
+  function fit() { var h = wrap.clientHeight; f.style.top = (-crop) + 'px'; f.style.height = (h + crop) + 'px'; }
   window.addEventListener('message', function (e) {
     var m = e.data;
     if (!m || m.avia !== 'h' || !(m.ih > 100)) return;
-    var bar = Math.round(wrap.clientHeight + crop - m.ih);
-    if (bar >= 0 && bar < 200 && Math.abs(bar - crop) > 1) { crop = bar; f.style.setProperty('--crop', crop + 'px'); }
+    lastIh = m.ih;
+    var bar = Math.round(f.offsetHeight - m.ih);
+    if (bar >= 0 && bar < 200 && Math.abs(bar - crop) > 1) { crop = bar; fit(); }
     show();
+    if (!sent) { sent = true; setTimeout(report, 4000); }
   });
+  window.addEventListener('resize', fit);
+  // one measurement per opening, so problems on a particular phone can be seen and fixed
+  function report() {
+    var p = document.createElement('div'); p.style.cssText = 'position:fixed;top:env(safe-area-inset-top);bottom:env(safe-area-inset-bottom);left:0;width:1px;visibility:hidden';
+    document.body.appendChild(p); var r = p.getBoundingClientRect(); p.remove();
+    var info = JSON.stringify({ wrap: 1, W: innerWidth, H: innerHeight, wrapH: wrap.clientHeight, fH: f.offsetHeight, crop: crop, ih: lastIh, sat: Math.round(r.top), sab: Math.round(innerHeight - r.bottom), sa: !!navigator.standalone, ua: navigator.userAgent });
+    try { fetch(APP + '?wdiag=' + encodeURIComponent(info), { mode: 'no-cors' }); } catch (e) {}
+  }
   setTimeout(show, 12000);
+  fit();
   f.src = APP + '?d=' + encodeURIComponent(dev);
 </script>
 </body>
