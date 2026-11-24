@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>تطبيق أفيا</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="تطبيق أفيا">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f4236">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#fff}
+  /* green strip behind the phone's clock and battery */
+  #top{position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:#0f4236;z-index:3}
+  /* the app sits between the clock bar and the phone's home bar */
+  #wrap{position:fixed;top:env(safe-area-inset-top);left:0;right:0;bottom:env(safe-area-inset-bottom);overflow:hidden;background:#f6f1e7}
+  /* Google's notice bar is pushed above the visible area */
+  #f{position:absolute;left:0;width:100%;border:0;top:calc(-1 * var(--crop, 0px));height:calc(100% + var(--crop, 0px));opacity:0;transition:opacity .25s}
+  #f.on{opacity:1}
+  #load{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0f4236;color:#f1ead8;font:600 15px system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;z-index:4;transition:opacity .3s}
+  #load img{width:84px;height:84px;border-radius:20px}
+  #load.gone{opacity:0;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="top"></div>
+<div id="wrap"><iframe id="f" title="تطبيق أفيا" allow="camera; microphone; clipboard-write"></iframe></div>
+<div id="load"><img src="icon-180.png" alt=""><div>جارٍ فتح تطبيق أفيا…</div></div>
+<script>
+  var APP = 'https://script.google.com/macros/s/AKfycbwNI-qJHX5tGMEYdV-zv53U4EbhIi8cLq-eo-FBYxI4uIEklEaiBeaQGlM4aroPx5S2AQ/exec';
+  // one id per phone, kept by this page so the app can recognise the phone for 3 days after a login
+  var dev = null;
+  try { dev = localStorage.getItem('avia_dev'); } catch (e) {}
+  if (!dev) {
+    var a = new Uint8Array(16); crypto.getRandomValues(a);
+    dev = 'd' + Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+    try { localStorage.setItem('avia_dev', dev); } catch (e) {}
+  }
+  var f = document.getElementById('f'), wrap = document.getElementById('wrap'), load = document.getElementById('load');
+  var crop = 0, shown = false;
+  function show() { if (shown) return; shown = true; f.className = 'on'; load.className = 'gone'; }
+  // the app reports how tall its own area is; the difference is Google's notice bar, which we hide
+  window.addEventListener('message', function (e) {
+    var m = e.data;
+    if (!m || m.avia !== 'h' || !(m.ih > 100)) return;
+    var bar = Math.round(wrap.clientHeight + crop - m.ih);
+    if (bar >= 0 && bar < 200 && Math.abs(bar - crop) > 1) { crop = bar; f.style.setProperty('--crop', crop + 'px'); }
+    show();
+  });
+  setTimeout(show, 12000);
+  f.src = APP + '?d=' + encodeURIComponent(dev);
+</script>
+</body>
+</html>
