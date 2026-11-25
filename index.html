@@ -13,11 +13,10 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <style>
+  /* white matches the app's bottom menu, so any strip the phone leaves under it looks like part of the menu */
   html,body{margin:0;height:100%;overflow:hidden;background:#fff}
-  /* green strip behind the phone's clock and battery */
-  #top{position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:#0f4236;z-index:3}
-  /* the app sits between the clock bar and the phone's home bar */
-  #wrap{position:fixed;top:env(safe-area-inset-top);left:0;right:0;bottom:env(safe-area-inset-bottom);overflow:hidden;background:#f6f1e7}
+  /* the app fills the whole screen; it pads its own header and bottom menu by the sizes this page sends it */
+  #wrap{position:fixed;top:0;left:0;right:0;height:100%;overflow:hidden;background:#f6f1e7}
   /* Google's notice bar is pushed above the visible area (sizes set in the script) */
   #f{position:absolute;left:0;top:0;width:100%;height:100%;border:0;display:block;opacity:0;transition:opacity .25s}
   #f.on{opacity:1}
@@ -27,7 +26,6 @@
 </style>
 </head>
 <body>
-<div id="top"></div>
 <div id="wrap"><iframe id="f" title="تطبيق أفيا" credentialless referrerpolicy="no-referrer" allow="camera; microphone; clipboard-write"></iframe></div>
 <div id="load"><img src="icon-180.png" alt=""><div>جارٍ فتح تطبيق أفيا…</div></div>
 <script>
@@ -44,22 +42,31 @@
   var crop = 0, shown = false, lastIh = 0, sent = false;
   function show() { if (shown) return; shown = true; f.className = 'on'; load.className = 'gone'; }
   // size the frame in exact pixels: taller than the visible area by the height of Google's notice bar, and shifted up by it
-  function fit() { var h = wrap.clientHeight; f.style.top = (-crop) + 'px'; f.style.height = (h + crop) + 'px'; }
+  function fit() { var h = window.innerHeight; wrap.style.height = h + 'px'; f.style.top = (-crop) + 'px'; f.style.height = (h + crop) + 'px'; }
+  // clock bar (top) and home bar (bottom) sizes; on some iPhones the page stops short of the screen bottom, and the home bar then sits in that strip
+  function insets() {
+    var p = document.createElement('div'); p.style.cssText = 'position:fixed;top:env(safe-area-inset-top);bottom:env(safe-area-inset-bottom);left:0;width:1px;visibility:hidden';
+    document.body.appendChild(p); var r = p.getBoundingClientRect(); p.remove();
+    var t = Math.max(0, Math.round(r.top)), b = Math.max(0, Math.round(innerHeight - r.bottom)), gap = 0;
+    if (navigator.standalone && innerHeight > innerWidth && screen.height > innerHeight) gap = Math.round(screen.height - innerHeight);
+    return { t: t, b: Math.max(0, b - gap), rawB: b, gap: gap };
+  }
+  var appWin = null;
+  function sendInsets() { if (!appWin) return; var i = insets(); try { appWin.postMessage({ avia: 'ins', t: i.t, b: i.b }, '*'); } catch (e) {} }
   window.addEventListener('message', function (e) {
     var m = e.data;
     if (!m || m.avia !== 'h' || !(m.ih > 100)) return;
-    lastIh = m.ih;
+    lastIh = m.ih; if (e.source && e.source !== appWin) { appWin = e.source; sendInsets(); }
     var bar = Math.round(f.offsetHeight - m.ih);
     if (bar >= 0 && bar < 200 && Math.abs(bar - crop) > 1) { crop = bar; fit(); }
     show();
     if (!sent) { sent = true; setTimeout(report, 4000); }
   });
-  window.addEventListener('resize', fit);
+  window.addEventListener('resize', function () { fit(); sendInsets(); });
   // one measurement per opening, so problems on a particular phone can be seen and fixed
   function report() {
-    var p = document.createElement('div'); p.style.cssText = 'position:fixed;top:env(safe-area-inset-top);bottom:env(safe-area-inset-bottom);left:0;width:1px;visibility:hidden';
-    document.body.appendChild(p); var r = p.getBoundingClientRect(); p.remove();
-    var info = JSON.stringify({ wrap: 1, W: innerWidth, H: innerHeight, wrapH: wrap.clientHeight, fH: f.offsetHeight, crop: crop, ih: lastIh, sat: Math.round(r.top), sab: Math.round(innerHeight - r.bottom), sa: !!navigator.standalone, ua: navigator.userAgent });
+    var i = insets();
+    var info = JSON.stringify({ wrap: 2, W: innerWidth, H: innerHeight, SH: screen.height, wrapH: wrap.clientHeight, fH: f.offsetHeight, crop: crop, ih: lastIh, sat: i.t, sab: i.rawB, gap: i.gap, sent: !!appWin, sa: !!navigator.standalone, ua: navigator.userAgent });
     try { fetch(APP + '?wdiag=' + encodeURIComponent(info), { mode: 'no-cors' }); } catch (e) {}
   }
   setTimeout(show, 12000);
